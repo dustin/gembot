@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -16,25 +18,11 @@ import (
 	"github.com/dustin/goquery"
 )
 
-const worthPrefix = "It is worth "
+const minRead = 8092
 
-var threshold = bitcoin.Amount(bitcoin.SatoshisPerBitcoin / 10)
-
-var siteread = flag.String("siteread", "http://bitcoingem.com/", "The site to monitor")
-var sitebuy = flag.String("sitebuy", "http://bitcoingem.com/calls/create_new_address3.php",
-	"URL to do the purchasing")
-var recvaddr = flag.String("recvaddr", "", "A receive address for payouts")
-var fromacct = flag.String("fromacct", "", "Sending account name")
 var checkInterval = flag.Duration("interval", time.Minute, "How frequently to check")
-var comment = flag.String("comment", "", "comment on your transaction")
-
-var bcServer = flag.String("bitcoin", "http://localhost:8333/", "Bitcoind")
-var bcUser = flag.String("bcuser", "someuser", "Bitcoin user")
-var bcPass = flag.String("bcpass", "somepass", "Bitcoin password")
-
-func init() {
-	flag.Var(&threshold, "maxbid", "Maximum bid we'll place")
-}
+var postBuyInterval = flag.Duration("postBuyInterval", time.Minute*5,
+	"How long to wait after purchasing before checking again")
 
 type State struct {
 	IsMine bool
@@ -45,13 +33,28 @@ var unknownData = errors.New("I don't recognize the data")
 
 var bc *bitcoin.BitcoindClient
 
-func must(err error) {
-	if err != nil {
-		log.Fatalf("Unexpected error:  %v", err)
-	}
+type site struct {
+	Threshold   bitcoin.Amount `json:"threshold"`
+	ReadURL     string         `json:"read"`
+	BuyURL      string         `json:"buy"`
+	RecvAddress string         `json:"recv"`
+	FromAcct    string         `json:"fromacct"`
+	Comment     string         `json:"comment"`
+	BuyDisabled bool           `json:"disabled"`
+
+	latestTx    string
+	previousAmt bitcoin.Amount
 }
 
-func parse(r io.Reader) (State, error) {
+var conf = struct {
+	Bitcoin     string `json:"bitcoin"`
+	BitcoinUser string `json:"bcuser"`
+	BitcoinPass string `json:"bcpass"`
+
+	Sites []site
+}{}
+
+func parse(r io.Reader, raddr string) (State, error) {
 	rv := State{}
 
 	g, err := goquery.Parse(r)
@@ -60,83 +63,157 @@ func parse(r io.Reader) (State, error) {
 	}
 	txt := g.Find("h2").Text()
 
-	if txt[:len(worthPrefix)] == worthPrefix {
-		parts := strings.SplitN(txt[len(worthPrefix):], " ", 2)
-		rv.Value, err = bitcoin.AmountFromBitcoinsString(parts[0])
-	} else {
-		err = unknownData
+	worth := ""
+	parts := strings.Split(txt, " ")
+	for i, w := range parts {
+		if w == "worth" && len(parts) > i {
+			worth = parts[i+1]
+			break
+		}
 	}
+	if worth == "" {
+		return rv, unknownData
+	}
+	rv.Value, err = bitcoin.AmountFromBitcoinsString(worth)
 
-	rv.IsMine = strings.Contains(txt, *recvaddr)
+	rv.IsMine = strings.Contains(txt, raddr)
 
 	return rv, err
 }
 
-func buy(amt bitcoin.Amount) error {
-	res, err := http.PostForm(*sitebuy, url.Values{"address": {*recvaddr}})
+func parseAddress(s string) string {
+	if s[0] == '{' {
+		ob := struct{ Address string }{}
+		json.Unmarshal([]byte(s), &ob)
+		return ob.Address
+	}
+	return s
+}
+
+func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
+	res, err := http.PostForm(s.BuyURL, url.Values{"address": {s.RecvAddress}})
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return fmt.Errorf("Failed to get payout address: %v", res.Status)
+		return false, fmt.Errorf("Failed to get payout address: %v", res.Status)
 	}
 	resdata, err := ioutil.ReadAll(io.LimitReader(res.Body, 80))
 	if err != nil {
-		return err
+		return false, err
 	}
-	ress := strings.TrimSpace(string(resdata))
+	ress := parseAddress(strings.TrimSpace(string(resdata)))
 
 	x, err := bc.ValidateAddress(ress)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !x.Isvalid {
-		return fmt.Errorf("Returned an invalid address:  %v", ress)
+		return false, fmt.Errorf("Returned an invalid address:  %v", ress)
+	}
+
+	if s.BuyDisabled {
+		log.Printf("Buy is disabled -- mocking it")
+		return true, nil
 	}
 
 	var txn string
-	if *fromacct == "" {
-		txn, err = bc.SendToAddress(x.Address, amt, *comment, "")
+	if s.FromAcct == "" {
+		txn, err = bc.SendToAddress(x.Address, amt, s.Comment, "")
 	} else {
-		txn, err = bc.SendFrom(*fromacct, x.Address, amt, -1, *comment, "")
+		txn, err = bc.SendFrom(s.FromAcct, x.Address, amt, -1, s.Comment, "")
 	}
 
 	if err == nil {
+		bought = true
+		s.latestTx = txn
 		log.Printf("Sent txn %v", txn)
 	}
 
-	return err
+	return
 }
 
-func checkSite() {
-	res, err := http.Get(*siteread)
-	must(err)
+func (s *site) checkSite() (bought bool, err error) {
+	res, err := http.Get(s.ReadURL)
+	if err != nil {
+		return false, err
+	}
 	defer res.Body.Close()
-	st, err := parse(io.LimitReader(res.Body, 4096))
-	must(err)
-	log.Printf("Current state:  %+v", st)
+	st, err := parse(io.LimitReader(res.Body, minRead), s.RecvAddress)
+	if err != nil {
+		return false, err
+	}
+
+	if st.Value != s.previousAmt {
+		s.previousAmt = st.Value
+		log.Printf("Value of %v is now:  %+v", s.ReadURL, st)
+	}
 
 	if st.IsMine {
 		log.Printf("I already seem to own it")
-		return
+		return false, nil
 	}
 
-	if st.Value <= threshold {
+	if st.Value <= s.Threshold {
 		log.Printf("Hey, we'll give that a bid!")
-		err := buy(st.Value)
-		must(err)
+		bought, err = s.buy(st.Value)
+	}
+	return
+}
+
+func (s site) monitor() {
+	ticker := time.NewTicker(*checkInterval)
+	var delay <-chan time.Time
+
+	for {
+		t := ticker.C
+		if delay != nil {
+			// If there's a delay, ignore our ticker
+			t = nil
+		}
+		select {
+		case <-delay:
+			delay = nil
+			log.Printf("Reenabling purchasing")
+		case <-t:
+			bought, err := s.checkSite()
+			if err != nil {
+				log.Printf("Error checking %v: %v", s.ReadURL, err)
+			}
+			if bought {
+				delay = time.After(*postBuyInterval)
+			}
+		}
+	}
+}
+
+func readConf(fn string) {
+	f, err := os.Open(fn)
+	if err != nil {
+		log.Fatalf("Error opening config: %v", err)
+	}
+	defer f.Close()
+
+	d := json.NewDecoder(f)
+	err = d.Decode(&conf)
+	if err != nil {
+		log.Fatalf("Error parsing config: %v", err)
 	}
 }
 
 func main() {
 	flag.Parse()
 
-	if *recvaddr == "" {
-		log.Fatalf("You need to supply a receive addr")
+	readConf(flag.Arg(0))
+
+	bc = bitcoin.NewBitcoindClient(conf.Bitcoin,
+		conf.BitcoinUser, conf.BitcoinPass)
+
+	for _, s := range conf.Sites {
+		log.Printf("Doing %v", s.ReadURL)
+		go s.monitor()
 	}
 
-	bc = bitcoin.NewBitcoindClient(*bcServer, *bcUser, *bcPass)
-
-	checkSite()
+	select {}
 }

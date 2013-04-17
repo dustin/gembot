@@ -10,7 +10,7 @@ func buyHandlerSuccess(w http.ResponseWriter, r *http.Request) {
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "../samples/mine.html")
+	http.ServeFile(w, r, "../samples/normal.html")
 }
 
 func main() {
