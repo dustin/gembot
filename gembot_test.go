@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"testing"
+
+	"github.com/dustin/go.bitcoin"
 )
 
 func parseFile(t *testing.T, fn string) State {
@@ -20,7 +22,10 @@ func parseFile(t *testing.T, fn string) State {
 
 func TestCurrentValue(t *testing.T) {
 	st := parseFile(t, "samples/normal.html")
-	exp := "1.82"
+	exp, err := bitcoin.AmountFromBitcoinsString("1.82")
+	if err != nil {
+		t.Fatalf("Error parsing expected amount:  %v", err)
+	}
 	if st.Value != exp {
 		t.Errorf("Expected value %q, got %q", exp, st.Value)
 	}
