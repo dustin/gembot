@@ -51,7 +51,8 @@ var conf = struct {
 	BitcoinUser string `json:"bcuser"`
 	BitcoinPass string `json:"bcpass"`
 
-	Sites []site
+	Sites         []site
+	Notifications []notifier
 }{}
 
 func parse(r io.Reader, raddr string) (State, error) {
@@ -115,6 +116,7 @@ func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
 
 	if s.BuyDisabled {
 		log.Printf("Buy is disabled -- mocking it")
+		s.markPurchased("MOCK")
 		return true, nil
 	}
 
@@ -127,11 +129,20 @@ func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
 
 	if err == nil {
 		bought = true
-		s.latestTx = txn
-		log.Printf("Sent txn %v", txn)
+		s.markPurchased(txn)
 	}
 
 	return
+}
+
+func (s *site) markPurchased(txn string) {
+	log.Printf("Sent txn %v", txn)
+	s.latestTx = txn
+
+	notifyCh <- notification{
+		Event: "Purchased from " + s.ReadURL,
+		Msg:   "Bought from " + s.ReadURL + " with " + txn,
+	}
 }
 
 func (s *site) checkSite() (bought bool, err error) {
@@ -217,6 +228,12 @@ func readConf(fn string) {
 	if err != nil {
 		log.Fatalf("Error parsing config: %v", err)
 	}
+
+	for _, v := range conf.Notifications {
+		if _, ok := notifyFuns[v.Driver]; !ok {
+			log.Fatalf("Unknown driver '%s' in '%s'", v.Driver, v.Name)
+		}
+	}
 }
 
 func main() {
@@ -226,6 +243,8 @@ func main() {
 
 	bc = bitcoin.NewBitcoindClient(conf.Bitcoin,
 		conf.BitcoinUser, conf.BitcoinPass)
+
+	go notify(conf.Notifications)
 
 	for _, s := range conf.Sites {
 		log.Printf("Doing %v", s.ReadURL)
