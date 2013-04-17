@@ -137,7 +137,7 @@ func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
 func (s *site) checkSite() (bought bool, err error) {
 	defer func(start time.Time) {
 		duration := time.Since(start)
-		if duration > time.Second {
+		if duration > time.Second*5 {
 			log.Printf("Took %v to check %v", duration, s.ReadURL)
 		}
 	}(time.Now())
