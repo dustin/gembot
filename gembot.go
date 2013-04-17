@@ -166,7 +166,13 @@ func (s *site) checkSite() (bought bool, err error) {
 		}
 	}(time.Now())
 
-	res, err := http.Get(s.ReadURL)
+	req, err := http.NewRequest("GET", s.ReadURL, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Range", fmt.Sprintf("bytes=0-%v", minRead))
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false, err
 	}
