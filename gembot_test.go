@@ -8,49 +8,46 @@ import (
 	"github.com/dustin/go.bitcoin"
 )
 
-func parseFile(t *testing.T, fn string) State {
+func parseFile(t *testing.T, fn, myname string) State {
 	f, err := os.Open(fn)
 	if err != nil {
 		t.Fatalf("Error parsing sample: %v", err)
 	}
 	defer f.Close()
-	rv, err := parse(io.LimitReader(f, minRead), "x")
+	rv, err := parse(io.LimitReader(f, minRead), myname)
 	if err != nil {
 		t.Fatalf("Error parsing: %v", err)
 	}
 	return rv
 }
 
-func TestCurrentValueGem(t *testing.T) {
-	st := parseFile(t, "samples/normal.html")
-	exp, err := bitcoin.AmountFromBitcoinsString("1.82")
-	if err != nil {
-		t.Fatalf("Error parsing expected amount:  %v", err)
+func TestCurrentValue(t *testing.T) {
+	tests := []struct {
+		filename string
+		exp      string
+		myname   string
+		isme     bool
+	}{
+		{"normal.html", "1.82", "someone else", false},
+		{"mine.html", "1.82", "n4pKTfuJLmbuK2PaymXLWGy3FEERTovmkK", true},
+		{"bears.html", "0.7379", "someone else", false},
+		{"goldbar.html", "0.05", "someone else", false},
 	}
-	if st.Value != exp {
-		t.Errorf("Expected value %q, got %q", exp, st.Value)
-	}
-}
 
-func TestCurrentValueBears(t *testing.T) {
-	st := parseFile(t, "samples/bears.html")
-	exp, err := bitcoin.AmountFromBitcoinsString("0.7379")
-	if err != nil {
-		t.Fatalf("Error parsing expected amount:  %v", err)
-	}
-	if st.Value != exp {
-		t.Errorf("Expected value %q, got %q", exp, st.Value)
-	}
-}
-
-func TestCurrentValueGoldbar(t *testing.T) {
-	st := parseFile(t, "samples/goldbar.html")
-	exp, err := bitcoin.AmountFromBitcoinsString("0.05")
-	if err != nil {
-		t.Fatalf("Error parsing expected amount:  %v", err)
-	}
-	if st.Value != exp {
-		t.Errorf("Expected value %q, got %q", exp, st.Value)
+	for _, test := range tests {
+		st := parseFile(t, "samples/"+test.filename, test.myname)
+		exp, err := bitcoin.AmountFromBitcoinsString(test.exp)
+		if err != nil {
+			t.Fatalf("Error parsing expected amount:  %v", err)
+		}
+		if st.Value != exp {
+			t.Errorf("Expected value %q from %v, got %q",
+				exp, test.filename, st.Value)
+		}
+		if st.IsMine != test.isme {
+			t.Errorf("Expected isme=%v for %v",
+				test.isme, test.filename)
+		}
 	}
 }
 
