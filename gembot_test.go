@@ -43,6 +43,17 @@ func TestCurrentValueBears(t *testing.T) {
 	}
 }
 
+func TestCurrentValueGoldbar(t *testing.T) {
+	st := parseFile(t, "samples/goldbar.html")
+	exp, err := bitcoin.AmountFromBitcoinsString("0.05")
+	if err != nil {
+		t.Fatalf("Error parsing expected amount:  %v", err)
+	}
+	if st.Value != exp {
+		t.Errorf("Expected value %q, got %q", exp, st.Value)
+	}
+}
+
 func TestAddressParsing(t *testing.T) {
 	a := `178sF7mXkMiGDKQWHjb1fVLEmzV4QSLrj`
 	tests := []string{

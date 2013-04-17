@@ -18,7 +18,7 @@ import (
 	"github.com/dustin/goquery"
 )
 
-const minRead = 8092
+const minRead = 16384
 
 var checkInterval = flag.Duration("interval", time.Minute, "How frequently to check")
 var postBuyInterval = flag.Duration("postBuyInterval", time.Minute*5,
