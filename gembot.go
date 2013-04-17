@@ -173,6 +173,16 @@ func (s site) monitor() {
 	ticker := time.NewTicker(*checkInterval)
 	var delay <-chan time.Time
 
+	// not too happy with the copy and pasting here, but I want it
+	// to run once, but still set these variables.
+	bought, err := s.checkSite()
+	if err != nil {
+		log.Printf("Error checking %v: %v", s.ReadURL, err)
+	}
+	if bought {
+		delay = time.After(*postBuyInterval)
+	}
+
 	for {
 		t := ticker.C
 		if delay != nil {
