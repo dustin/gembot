@@ -166,6 +166,16 @@ func (s *site) checkSite() (bought bool, err error) {
 		}
 	}(time.Now())
 
+	// Don't bite off more than we can chew.
+	threshold := s.Threshold
+	balance, err := bc.GetBalance()
+	if err != nil {
+		return false, fmt.Errorf("Unable to get account balance: %v", err)
+	}
+	if threshold > balance {
+		threshold = balance
+	}
+
 	req, err := http.NewRequest("GET", s.ReadURL, nil)
 	if err != nil {
 		return false, err
@@ -192,7 +202,7 @@ func (s *site) checkSite() (bought bool, err error) {
 		return false, nil
 	}
 
-	if st.Value <= s.Threshold {
+	if st.Value <= threshold {
 		log.Printf("Hey, we'll give that a bid!")
 		bought, err = s.buy(st.Value)
 	}
