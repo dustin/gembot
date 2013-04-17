@@ -227,7 +227,7 @@ func (s *site) checkSite() (bought bool, err error) {
 	}
 
 	if st.IsMine {
-		log.Printf("I already seem to own it")
+		log.Printf("I already seem to own %v", s.ReadURL)
 		s.state = owned
 		return false, nil
 	}
