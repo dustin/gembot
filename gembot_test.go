@@ -8,17 +8,13 @@ import (
 	"github.com/dustin/go.bitcoin"
 )
 
-func parseFile(t *testing.T, fn, myname string) State {
+func parseFile(t *testing.T, fn, myname string) (State, error) {
 	f, err := os.Open(fn)
 	if err != nil {
-		t.Fatalf("Error parsing sample: %v", err)
+		return State{}, err
 	}
 	defer f.Close()
-	rv, err := parse(io.LimitReader(f, minRead), myname)
-	if err != nil {
-		t.Fatalf("Error parsing: %v", err)
-	}
-	return rv
+	return parse(io.LimitReader(f, minRead), myname)
 }
 
 func TestCurrentValue(t *testing.T) {
@@ -32,10 +28,15 @@ func TestCurrentValue(t *testing.T) {
 		{"mine.html", "1.82", "n4pKTfuJLmbuK2PaymXLWGy3FEERTovmkK", true},
 		{"bears.html", "0.7379", "someone else", false},
 		{"goldbar.html", "0.05", "someone else", false},
+		{"bitkitty.html", "0.2988", "someone else", false},
 	}
 
 	for _, test := range tests {
-		st := parseFile(t, "samples/"+test.filename, test.myname)
+		st, err := parseFile(t, "samples/"+test.filename, test.myname)
+		if err != nil {
+			t.Errorf("Error parsing sample from %v: %v", test.filename, err)
+			continue
+		}
 		exp, err := bitcoin.AmountFromBitcoinsString(test.exp)
 		if err != nil {
 			t.Fatalf("Error parsing expected amount:  %v", err)

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 	"github.com/dustin/goquery"
 )
 
-const minRead = 16384
+const minRead = 1024 * 16
 
 const (
 	normal = iota
@@ -37,6 +38,12 @@ var durations = map[int]time.Duration{
 type State struct {
 	IsMine bool
 	Value  bitcoin.Amount
+}
+
+var costFinders = []*regexp.Regexp{
+	regexp.MustCompile(`It is worth ([\d.]+) bitcoins?`),
+	regexp.MustCompile(`They are worth ([\d.]+) bitcoins?`),
+	regexp.MustCompile(`re-homing fee is ([\d.]+) bitcoins?`),
 }
 
 var unknownData = errors.New("I don't recognize the data")
@@ -73,13 +80,21 @@ func parse(r io.Reader, raddr string) (State, error) {
 	if err != nil {
 		return rv, err
 	}
-	txt := g.Find("h2").Text()
+
+	locs := []string{"h2", "h3"}
 
 	worth := ""
-	parts := strings.Split(txt, " ")
-	for i, w := range parts {
-		if w == "worth" && len(parts) > i {
-			worth = parts[i+1]
+	txt := ""
+	for _, loc := range locs {
+		txt = g.Find(loc).Text()
+		for _, r := range costFinders {
+			m := r.FindAllStringSubmatch(txt, 2)
+			if len(m) > 0 && len(m[0]) > 0 {
+				worth = m[0][1]
+				break
+			}
+		}
+		if worth != "" {
 			break
 		}
 	}
@@ -183,7 +198,8 @@ func (s *site) checkSite() (bought bool, err error) {
 	threshold := s.Threshold
 	balance, err := bc.GetBalance()
 	if err != nil {
-		return false, fmt.Errorf("Unable to get account balance: %v", err)
+		log.Printf("Unable to get account balance: %v", err)
+		// return false, fmt.Errorf("Unable to get account balance: %v", err)
 	}
 	if threshold > balance {
 		threshold = balance
