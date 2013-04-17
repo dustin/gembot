@@ -20,9 +20,19 @@ import (
 
 const minRead = 16384
 
-var checkInterval = flag.Duration("interval", time.Minute, "How frequently to check")
-var postBuyInterval = flag.Duration("postBuyInterval", time.Minute*5,
-	"How long to wait after purchasing before checking again")
+const (
+	normal = iota
+	tooHigh
+	owned
+	aggressive
+)
+
+var durations = map[int]time.Duration{
+	tooHigh:    time.Minute * 15,
+	owned:      time.Minute * 5,
+	normal:     time.Minute,
+	aggressive: time.Second * 10,
+}
 
 type State struct {
 	IsMine bool
@@ -42,6 +52,7 @@ type site struct {
 	Comment     string         `json:"comment"`
 	BuyDisabled bool           `json:"disabled"`
 
+	state       int
 	latestTx    string
 	previousAmt bitcoin.Amount
 }
@@ -166,6 +177,8 @@ func (s *site) checkSite() (bought bool, err error) {
 		}
 	}(time.Now())
 
+	s.state = normal
+
 	// Don't bite off more than we can chew.
 	threshold := s.Threshold
 	balance, err := bc.GetBalance()
@@ -199,6 +212,7 @@ func (s *site) checkSite() (bought bool, err error) {
 
 	if st.IsMine {
 		log.Printf("I already seem to own it")
+		s.state = owned
 		return false, nil
 	}
 
@@ -206,11 +220,25 @@ func (s *site) checkSite() (bought bool, err error) {
 		log.Printf("Hey, we'll give that a bid!")
 		bought, err = s.buy(st.Value)
 	}
+
+	if bought || st.IsMine {
+		s.state = owned
+	} else if st.Value <= s.Threshold {
+		s.state = aggressive
+	} else {
+		s.state = tooHigh
+	}
+
 	return
 }
 
 func (s site) monitor() {
-	ticker := time.NewTicker(*checkInterval)
+	tickers := map[int]*time.Ticker{
+		tooHigh:    time.NewTicker(durations[tooHigh]),
+		owned:      time.NewTicker(durations[owned]),
+		normal:     time.NewTicker(durations[normal]),
+		aggressive: time.NewTicker(durations[aggressive]),
+	}
 	var delay <-chan time.Time
 
 	// not too happy with the copy and pasting here, but I want it
@@ -220,11 +248,11 @@ func (s site) monitor() {
 		log.Printf("Error checking %v: %v", s.ReadURL, err)
 	}
 	if bought {
-		delay = time.After(*postBuyInterval)
+		delay = time.After(durations[owned])
 	}
 
 	for {
-		t := ticker.C
+		t := tickers[s.state].C
 		if delay != nil {
 			// If there's a delay, ignore our ticker
 			t = nil
@@ -239,7 +267,7 @@ func (s site) monitor() {
 				log.Printf("Error checking %v: %v", s.ReadURL, err)
 			}
 			if bought {
-				delay = time.After(*postBuyInterval)
+				delay = time.After(durations[owned])
 			}
 		}
 	}
