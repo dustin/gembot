@@ -29,6 +29,7 @@ func TestCurrentValue(t *testing.T) {
 		{"bears.html", "0.7379", "someone else", false},
 		{"goldbar.html", "0.05", "someone else", false},
 		{"bitkitty.html", "0.2988", "someone else", false},
+		{"bitjade.html", "0.0625", "someone else", false},
 	}
 
 	for _, test := range tests {
