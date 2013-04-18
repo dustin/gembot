@@ -74,6 +74,66 @@ var conf = struct {
 	Notifications []notifier
 }{}
 
+const buyStateFile = ",buystate.json"
+
+type buyIntent struct {
+	site string
+	amt  bitcoin.Amount
+	res  chan bool
+}
+
+var buyReq = make(chan buyIntent)
+var buyComplete = make(chan buyIntent)
+
+func initAmounts() map[string]bitcoin.Amount {
+	f, err := os.Open(buyStateFile)
+	if err != nil && !os.IsNotExist(err) {
+		log.Fatalf("Error opening buy state: %v", err)
+	}
+	defer f.Close()
+
+	rv := map[string]bitcoin.Amount{}
+	d := json.NewDecoder(f)
+	err = d.Decode(&rv)
+	if err != nil {
+		log.Fatalf("Error decoding state: %v", err)
+	}
+	return rv
+}
+
+func persistState(st interface{}) {
+	tmpfile := buyStateFile + ".tmp"
+	f, err := os.Create(tmpfile)
+	if err != nil {
+		log.Printf("Error creating tmp file: %v", err)
+		return
+	}
+	defer f.Close()
+
+	e := json.NewEncoder(f)
+	err = e.Encode(st)
+	if err != nil {
+		log.Printf("Error encoding state: %v", err)
+	}
+
+	os.Rename(tmpfile, buyStateFile)
+}
+
+func buyMonitor() {
+	lastBuy := initAmounts()
+
+	for {
+		select {
+		case req := <-buyReq:
+			req.res <- lastBuy[req.site] != req.amt
+		case req := <-buyComplete:
+			lastBuy[req.site] = req.amt
+			persistState(lastBuy)
+			close(req.res)
+		}
+	}
+}
+
 func parse(r io.Reader, raddr string) (State, error) {
 	rv := State{}
 
@@ -154,6 +214,8 @@ func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
 		return false, fmt.Errorf("Returned an invalid address:  %v", ress)
 	}
 
+	log.Printf("Sending %v to %v for %v", amt, x.Address, s.ReadURL)
+
 	var txn string
 	if s.FromAcct == "" {
 		txn, err = bc.SendToAddress(x.Address, amt, s.Comment, "")
@@ -163,15 +225,17 @@ func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
 
 	if err == nil {
 		bought = true
-		s.markPurchased(txn)
+		s.markPurchased(txn, amt)
 	}
 
 	return
 }
 
-func (s *site) markPurchased(txn string) {
+func (s *site) markPurchased(txn string, amt bitcoin.Amount) {
 	log.Printf("Sent txn %v", txn)
 	s.latestTx = txn
+
+	buyComplete <- buyIntent{s.ReadURL, amt, make(chan bool)}
 
 	notifyCh <- notification{
 		Event: "Purchased from " + s.ReadURL,
@@ -219,6 +283,15 @@ func (s *site) checkSite() (bought bool, err error) {
 	if st.Value != s.previousAmt {
 		s.previousAmt = st.Value
 		log.Printf("Value of %v is now:  %+v", s.ReadURL, st)
+	}
+
+	canch := make(chan bool)
+	buyReq <- buyIntent{s.ReadURL, st.Value, canch}
+
+	if !<-canch {
+		log.Printf("Buy manager is blocking us from buying? (we own it?)")
+		s.state = owned
+		return false, nil
 	}
 
 	if st.IsMine {
@@ -316,6 +389,8 @@ func main() {
 	flag.Parse()
 
 	readConf(flag.Arg(0))
+
+	go buyMonitor()
 
 	bc = bitcoin.NewBitcoindClient(conf.Bitcoin,
 		conf.BitcoinUser, conf.BitcoinPass)
