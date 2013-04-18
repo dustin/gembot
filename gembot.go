@@ -288,16 +288,6 @@ func (s *site) checkSite() (bought bool, err error) {
 		log.Printf("Value of %v is now:  %+v", s.ReadURL, st)
 	}
 
-	canch := make(chan error)
-	buyReq <- buyIntent{s.ReadURL, st.Value, canch}
-	err = <-canch
-
-	if err != nil {
-		log.Printf("Buy manager is blocking us from buying: %v", err)
-		s.state = owned
-		return false, nil
-	}
-
 	if st.IsMine {
 		log.Printf("I already seem to own %v", s.ReadURL)
 		s.state = owned
@@ -305,6 +295,16 @@ func (s *site) checkSite() (bought bool, err error) {
 	}
 
 	if st.Value <= s.Threshold {
+		canch := make(chan error)
+		buyReq <- buyIntent{s.ReadURL, st.Value, canch}
+		err = <-canch
+
+		if err != nil {
+			log.Printf("Buy manager is blocking us from buying: %v", err)
+			s.state = owned
+			return false, nil
+		}
+
 		log.Printf("Hey, we'll give that a bid!")
 		bought, err = s.buy(st.Value)
 	}
