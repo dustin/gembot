@@ -57,7 +57,7 @@ type site struct {
 	RecvAddress string         `json:"recv"`
 	FromAcct    string         `json:"fromacct"`
 	Comment     string         `json:"comment"`
-	BuyDisabled bool           `json:"disabled"`
+	Disabled    bool           `json:"disabled"`
 
 	state       int
 	latestTx    string
@@ -151,12 +151,6 @@ func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
 	}
 	if !x.Isvalid {
 		return false, fmt.Errorf("Returned an invalid address:  %v", ress)
-	}
-
-	if s.BuyDisabled {
-		log.Printf("Buy is disabled -- mocking it")
-		s.markPurchased("MOCK")
-		return true, nil
 	}
 
 	var txn string
@@ -320,6 +314,11 @@ func main() {
 	go notify(conf.Notifications)
 
 	for _, s := range conf.Sites {
+		if s.Disabled {
+			log.Printf("Ignoring %v since buy is disabled",
+				s.ReadURL)
+			continue
+		}
 		log.Printf("Doing %v", s.ReadURL)
 		go s.monitor()
 	}
