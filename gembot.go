@@ -127,8 +127,9 @@ func buyMonitor() {
 	for {
 		select {
 		case req := <-buyReq:
-
 			balance, err := bc.GetBalance()
+			log.Printf("Request to buy %v at %v with a balance of %v",
+				req.site, req.amt, balance)
 			switch {
 			case err != nil:
 				req.res <- err
