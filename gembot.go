@@ -48,6 +48,8 @@ var costFinders = []*regexp.Regexp{
 }
 
 var unknownData = errors.New("I don't recognize the data")
+var insufficientFunds = errors.New("insufficient funds")
+var maybeOwned = errors.New("possibly already own this")
 
 var bc *bitcoin.BitcoindClient
 
@@ -79,7 +81,7 @@ const buyStateFile = ",buystate.json"
 type buyIntent struct {
 	site string
 	amt  bitcoin.Amount
-	res  chan bool
+	res  chan error
 }
 
 var buyReq = make(chan buyIntent)
@@ -125,7 +127,18 @@ func buyMonitor() {
 	for {
 		select {
 		case req := <-buyReq:
-			req.res <- lastBuy[req.site] != req.amt
+
+			balance, err := bc.GetBalance()
+			switch {
+			case err != nil:
+				req.res <- err
+			case lastBuy[req.site] == req.amt:
+				req.res <- maybeOwned
+			case req.amt > balance:
+				req.res <- insufficientFunds
+			default:
+				req.res <- nil
+			}
 		case req := <-buyComplete:
 			lastBuy[req.site] = req.amt
 			persistState(lastBuy)
@@ -235,7 +248,7 @@ func (s *site) markPurchased(txn string, amt bitcoin.Amount) {
 	log.Printf("Sent txn %v", txn)
 	s.latestTx = txn
 
-	buyComplete <- buyIntent{s.ReadURL, amt, make(chan bool)}
+	buyComplete <- buyIntent{s.ReadURL, amt, make(chan error)}
 
 	notifyCh <- notification{
 		Event: "Purchased from " + s.ReadURL,
@@ -252,17 +265,6 @@ func (s *site) checkSite() (bought bool, err error) {
 	}(time.Now())
 
 	s.state = normal
-
-	// Don't bite off more than we can chew.
-	threshold := s.Threshold
-	balance, err := bc.GetBalance()
-	if err != nil {
-		log.Printf("Unable to get account balance: %v", err)
-		// return false, fmt.Errorf("Unable to get account balance: %v", err)
-	}
-	if threshold > balance {
-		threshold = balance
-	}
 
 	req, err := http.NewRequest("GET", s.ReadURL, nil)
 	if err != nil {
@@ -285,11 +287,12 @@ func (s *site) checkSite() (bought bool, err error) {
 		log.Printf("Value of %v is now:  %+v", s.ReadURL, st)
 	}
 
-	canch := make(chan bool)
+	canch := make(chan error)
 	buyReq <- buyIntent{s.ReadURL, st.Value, canch}
+	err = <-canch
 
-	if !<-canch {
-		log.Printf("Buy manager is blocking us from buying? (we own it?)")
+	if err != nil {
+		log.Printf("Buy manager is blocking us from buying: %v", err)
 		s.state = owned
 		return false, nil
 	}
@@ -300,7 +303,7 @@ func (s *site) checkSite() (bought bool, err error) {
 		return false, nil
 	}
 
-	if st.Value <= threshold {
+	if st.Value <= s.Threshold {
 		log.Printf("Hey, we'll give that a bid!")
 		bought, err = s.buy(st.Value)
 	}
