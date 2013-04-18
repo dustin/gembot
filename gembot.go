@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -242,6 +243,12 @@ func (s *site) checkSite() (bought bool, err error) {
 	return
 }
 
+func (s site) randomDelay(n int) {
+	d := time.Duration(rand.Intn(n)) * time.Second
+	log.Printf("Waiting %v before starting timer of %v", d, s.ReadURL)
+	time.Sleep(d)
+}
+
 func (s site) monitor() {
 	tickers := map[int]*time.Ticker{
 		tooHigh:    time.NewTicker(durations[tooHigh]),
@@ -260,6 +267,8 @@ func (s site) monitor() {
 	if bought {
 		delay = time.After(durations[owned])
 	}
+
+	s.randomDelay(13)
 
 	for {
 		t := tickers[s.state].C
