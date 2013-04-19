@@ -253,7 +253,7 @@ func (s *site) markPurchased(txn string, amt bitcoin.Amount) {
 
 	notifyCh <- notification{
 		Event: "Purchased from " + s.ReadURL,
-		Msg:   "Bought from " + s.ReadURL + " with " + txn,
+		Msg:   "Bought from " + s.ReadURL + " at " + amt.String() + " with " + txn,
 	}
 }
 
