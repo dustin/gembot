@@ -66,6 +66,7 @@ type site struct {
 
 	state       int
 	latestTx    string
+	pendingTx   string
 	previousAmt bitcoin.Amount
 }
 
@@ -298,6 +299,8 @@ func (s *site) checkSite() (bought bool, err error) {
 		return false, err
 	}
 
+	s.pendingTx = st.Pending
+
 	if st.Value != s.previousAmt {
 		s.previousAmt = st.Value
 		log.Printf("Value of %v is now:  %+v", s.ReadURL, st)
@@ -347,6 +350,30 @@ func (s site) randomDelay(n int) {
 	time.Sleep(d)
 }
 
+func monitorTransaction(txn string) <-chan bool {
+	rv := make(chan bool)
+
+	go func() {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+
+		for _ = range t.C {
+			tx, err := bc.GetRawTransaction(txn)
+			if err != nil {
+				close(rv)
+				return
+			}
+			log.Printf("Confirmations: %v", tx.Confirmations)
+			if tx.Confirmations > 0 {
+				close(rv)
+				return
+			}
+		}
+	}()
+
+	return rv
+}
+
 func (s site) monitor() {
 	tickers := map[int]*time.Ticker{
 		tooHigh:    time.NewTicker(durations[tooHigh]),
@@ -355,6 +382,7 @@ func (s site) monitor() {
 		aggressive: time.NewTicker(durations[aggressive]),
 	}
 	var delay <-chan time.Time
+	var txnch <-chan bool
 
 	// not too happy with the copy and pasting here, but I want it
 	// to run once, but still set these variables.
@@ -370,6 +398,10 @@ func (s site) monitor() {
 			delay = time.After(durations[owned])
 		}
 
+		if txnch == nil && s.pendingTx != "" {
+			txnch = monitorTransaction(s.pendingTx)
+		}
+
 		t := tickers[s.state].C
 		if delay != nil {
 			// If there's a delay, ignore our ticker
@@ -379,6 +411,9 @@ func (s site) monitor() {
 		case <-delay:
 			delay = nil
 			log.Printf("Reenabling purchasing")
+		case <-txnch:
+			bought, err = s.checkSite()
+			txnch = nil
 		case <-t:
 			bought, err = s.checkSite()
 		}
