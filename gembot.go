@@ -419,6 +419,7 @@ func (s site) monitor() {
 		select {
 		case <-delay:
 			delay = nil
+			bought = false
 			log.Printf("Reenabling purchasing of %v", s.ReadURL)
 		case <-txnch:
 			bought, err = s.checkSite()
