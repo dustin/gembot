@@ -282,6 +282,10 @@ func (s *site) checkSite() (bought bool, err error) {
 	if err != nil {
 		return false, err
 	}
+
+	req.Header.Set("Origin", s.ReadURL)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_3) "+
+		"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.47 Safari/537.36")
 	req.Header.Set("Range", fmt.Sprintf("bytes=0-%v", minRead))
 
 	res, err := http.DefaultClient.Do(req)
