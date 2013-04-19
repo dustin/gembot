@@ -354,18 +354,17 @@ func monitorTransaction(txn string) <-chan bool {
 	rv := make(chan bool)
 
 	go func() {
-		t := time.NewTicker(time.Second)
+		t := time.NewTicker(time.Millisecond * 500)
 		defer t.Stop()
+		defer close(rv)
 
 		for _ = range t.C {
 			tx, err := bc.GetRawTransaction(txn)
 			if err != nil {
-				close(rv)
+				log.Printf("Error getting transaction %v: %v", txn, err)
 				return
 			}
-			log.Printf("Confirmations: %v", tx.Confirmations)
 			if tx.Confirmations > 0 {
-				close(rv)
 				return
 			}
 		}
