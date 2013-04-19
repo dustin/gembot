@@ -356,6 +356,7 @@ func monitorTransaction(txn string) <-chan bool {
 	go func() {
 		latest := time.After(time.Hour * 2)
 		t := time.NewTicker(time.Millisecond * 500)
+		defer log.Printf("No longer monitoring transaction %v", txn)
 		defer t.Stop()
 		defer close(rv)
 
@@ -378,6 +379,7 @@ func monitorTransaction(txn string) <-chan bool {
 		}
 	}()
 
+	log.Printf("Monitoring transaction %v", txn)
 	return rv
 }
 
