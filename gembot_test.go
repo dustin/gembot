@@ -59,6 +59,20 @@ func TestCurrentValue(t *testing.T) {
 	}
 }
 
+func TestPending(t *testing.T) {
+	exp := `5c25cc9586571c1327961b22203652cab50b24b82dc4e5091fb5b5821df03061`
+	st, err := parseFile(t, "samples/pending.html", "x")
+	if err != nil {
+		t.Fatalf("Error parsing pending sample")
+	}
+	if !st.Locked {
+		t.Fatalf("Expected locked")
+	}
+	if st.Pending != exp {
+		t.Fatalf("Expected tx=%q, got %q", exp, st.Pending)
+	}
+}
+
 func TestAddressParsing(t *testing.T) {
 	a := `178sF7mXkMiGDKQWHjb1fVLEmzV4QSLrj`
 	tests := []string{

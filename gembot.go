@@ -37,9 +37,10 @@ var durations = map[int]time.Duration{
 }
 
 type State struct {
-	IsMine bool
-	Locked bool
-	Value  bitcoin.Amount
+	IsMine  bool
+	Locked  bool
+	Value   bitcoin.Amount
+	Pending string
 }
 
 var costFinders = []*regexp.Regexp{
@@ -181,6 +182,14 @@ func parse(r io.Reader, raddr string) (State, error) {
 
 	rv.IsMine = strings.Contains(txt, raddr)
 	rv.Locked = len(g.Find(".nonbuy")) > 0
+
+	if rv.Locked {
+		rv.Pending = g.Find("div.secondary a").Attr("href")
+		x := strings.LastIndex(rv.Pending, "/")
+		if x > 0 {
+			rv.Pending = rv.Pending[x+1:]
+		}
+	}
 
 	return rv, err
 }
