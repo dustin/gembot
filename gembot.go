@@ -359,16 +359,17 @@ func (s site) monitor() {
 	// not too happy with the copy and pasting here, but I want it
 	// to run once, but still set these variables.
 	bought, err := s.checkSite()
-	if err != nil {
-		log.Printf("Error checking %v: %v", s.ReadURL, err)
-	}
-	if bought {
-		delay = time.After(durations[owned])
-	}
 
 	s.randomDelay(13)
 
 	for {
+		if err != nil {
+			log.Printf("Error checking %v: %v", s.ReadURL, err)
+		}
+		if bought {
+			delay = time.After(durations[owned])
+		}
+
 		t := tickers[s.state].C
 		if delay != nil {
 			// If there's a delay, ignore our ticker
@@ -379,13 +380,7 @@ func (s site) monitor() {
 			delay = nil
 			log.Printf("Reenabling purchasing")
 		case <-t:
-			bought, err := s.checkSite()
-			if err != nil {
-				log.Printf("Error checking %v: %v", s.ReadURL, err)
-			}
-			if bought {
-				delay = time.After(durations[owned])
-			}
+			bought, err = s.checkSite()
 		}
 	}
 }
