@@ -38,6 +38,7 @@ var durations = map[int]time.Duration{
 
 type State struct {
 	IsMine bool
+	Locked bool
 	Value  bitcoin.Amount
 }
 
@@ -179,6 +180,7 @@ func parse(r io.Reader, raddr string) (State, error) {
 	rv.Value, err = bitcoin.AmountFromBitcoinsString(worth)
 
 	rv.IsMine = strings.Contains(txt, raddr)
+	rv.Locked = len(g.Find(".nonbuy")) > 0
 
 	return rv, err
 }
@@ -295,6 +297,12 @@ func (s *site) checkSite() (bought bool, err error) {
 	}
 
 	if st.Value <= s.Threshold {
+		if st.Locked {
+			log.Printf("Purchasing of %v is locked", s.ReadURL)
+			s.state = aggressive
+			return false, nil
+		}
+
 		canch := make(chan error)
 		buyReq <- buyIntent{s.ReadURL, st.Value, canch}
 		err = <-canch

@@ -23,13 +23,15 @@ func TestCurrentValue(t *testing.T) {
 		exp      string
 		myname   string
 		isme     bool
+		islocked bool
 	}{
-		{"normal.html", "1.82", "someone else", false},
-		{"mine.html", "1.82", "n4pKTfuJLmbuK2PaymXLWGy3FEERTovmkK", true},
-		{"bears.html", "0.7379", "someone else", false},
-		{"goldbar.html", "0.05", "someone else", false},
-		{"bitkitty.html", "0.2988", "someone else", false},
-		{"bitjade.html", "0.0625", "someone else", false},
+		{"normal.html", "1.82", "someone else", false, false},
+		{"locked.html", "1.82", "someone else", false, true},
+		{"mine.html", "1.82", "n4pKTfuJLmbuK2PaymXLWGy3FEERTovmkK", true, false},
+		{"bears.html", "0.7379", "someone else", false, false},
+		{"goldbar.html", "0.05", "someone else", false, false},
+		{"bitkitty.html", "0.2988", "someone else", false, false},
+		{"bitjade.html", "0.0625", "someone else", false, false},
 	}
 
 	for _, test := range tests {
@@ -49,6 +51,10 @@ func TestCurrentValue(t *testing.T) {
 		if st.IsMine != test.isme {
 			t.Errorf("Expected isme=%v for %v",
 				test.isme, test.filename)
+		}
+		if st.Locked != test.islocked {
+			t.Errorf("Expected locked=%v for %v",
+				test.islocked, test.filename)
 		}
 	}
 }
