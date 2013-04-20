@@ -451,10 +451,14 @@ func readConf(fn string) {
 }
 
 func main() {
+	httpBind := flag.String("http", ":8077",
+		"HTTP binding address (for status/listening")
+
 	flag.Parse()
 
 	readConf(flag.Arg(0))
 
+	go startHTTPServer(*httpBind)
 	go buyMonitor()
 
 	bc = bitcoin.NewBitcoindClient(conf.Bitcoin,
