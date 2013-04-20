@@ -31,6 +31,7 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 			t.Fee.String(),
 		})
 	}
+	e.Flush()
 }
 
 func startHTTPServer(addr string) {
