@@ -23,6 +23,10 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 	e.Write([]string{"ts", "comment", "confirmations", "amount", "fee"})
 
 	for _, t := range txns {
+		if t.Amount > 0 {
+			// Ignore funding, we only care about what we paid out.
+			continue
+		}
 		e.Write([]string{
 			t.TransactionTime().Format(time.RFC3339),
 			t.Comment,
