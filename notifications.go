@@ -89,6 +89,9 @@ func notifyWebhook(n notifier, note notification) (err error) {
 }
 
 func (n notifier) notify(note notification) {
+	if n.Disabled {
+		return
+	}
 	log.Printf("Sending notification:  %v", note)
 	for i := 0; i < max_retries; i++ {
 		if err := notifyFuns[n.Driver](n, note); err == nil {
