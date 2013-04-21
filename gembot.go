@@ -426,7 +426,7 @@ func (s site) monitor() {
 			delay = time.After(durations[owned])
 		}
 
-		if txnch == nil && s.pendingTx != "" {
+		if txnch == nil && s.pendingTx != "" && s.state != owned {
 			txnch = monitorTransaction(s.pendingTx)
 		}
 
