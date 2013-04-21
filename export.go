@@ -24,7 +24,7 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 		"confirmations", "amount", "fee", "txn"})
 
 	for acct := range accts {
-		txns, err := bc.ListTransactions("", 1000, 0)
+		txns, err := bc.ListTransactions(acct, 1000, 0)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
