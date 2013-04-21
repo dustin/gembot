@@ -20,7 +20,8 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 
 	e := csv.NewWriter(w)
 
-	e.Write([]string{"ts", "acct", "comment", "confirmations", "amount", "fee", "txn"})
+	e.Write([]string{"ts", "acct", "dir", "comment",
+		"confirmations", "amount", "fee", "txn"})
 
 	for acct := range accts {
 		txns, err := bc.ListTransactions("", 1000, 0)
@@ -30,9 +31,14 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 		}
 
 		for _, t := range txns {
+			dir := "out"
+			if t.Amount > 0 {
+				dir = "in"
+			}
 			e.Write([]string{
 				t.TransactionTime().Format(time.RFC3339),
 				acct,
+				dir,
 				t.Comment,
 				strconv.Itoa(t.Confirmations),
 				t.Amount.String(),
