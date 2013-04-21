@@ -5,10 +5,13 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
 func exportTransactions(w http.ResponseWriter, req *http.Request) {
+	q := req.FormValue("q")
+
 	accts, err := bc.ListAccounts()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -31,6 +34,9 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 		}
 
 		for _, t := range txns {
+			if !(strings.Contains(acct, q) || strings.Contains(t.Comment, q)) {
+				continue
+			}
 			dir := "out"
 			if t.Amount > 0 {
 				dir = "in"
