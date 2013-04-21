@@ -14,7 +14,7 @@ func parseFile(t *testing.T, fn, myname string) (State, error) {
 		return State{}, err
 	}
 	defer f.Close()
-	return parse(io.LimitReader(f, minRead), myname)
+	return parse("http://whatever/", io.LimitReader(f, minRead), myname)
 }
 
 func TestCurrentValue(t *testing.T) {

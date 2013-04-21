@@ -37,6 +37,7 @@ var durations = map[int]time.Duration{
 }
 
 type State struct {
+	Site    string
 	IsMine  bool
 	Locked  bool
 	Value   bitcoin.Amount
@@ -89,6 +90,7 @@ type buyIntent struct {
 
 var buyReq = make(chan buyIntent)
 var buyComplete = make(chan buyIntent)
+var buyState = make(chan State)
 
 func initAmounts() map[string]bitcoin.Amount {
 	f, err := os.Open(buyStateFile)
@@ -147,12 +149,27 @@ func buyMonitor() {
 			lastBuy[req.site] = req.amt
 			persistState(lastBuy)
 			close(req.res)
+		case st := <-buyState:
+			lb, ok := lastBuy[st.Site]
+			if !ok {
+				continue
+			}
+
+			if !st.IsMine && st.Value > lb {
+				notifyCh <- notification{
+					Event: "Sold " + st.Site,
+					Msg: "Sold " + st.Site + " at " + st.Value.String() +
+						" after buying at " + lb.String(),
+				}
+				delete(lastBuy, st.Site)
+				persistState(lastBuy)
+			}
 		}
 	}
 }
 
-func parse(r io.Reader, raddr string) (State, error) {
-	rv := State{}
+func parse(site string, r io.Reader, raddr string) (State, error) {
+	rv := State{Site: site}
 
 	g, err := goquery.Parse(r)
 	if err != nil {
@@ -294,10 +311,12 @@ func (s *site) checkSite() (bought bool, err error) {
 		return false, err
 	}
 	defer res.Body.Close()
-	st, err := parse(io.LimitReader(res.Body, minRead), s.RecvAddress)
+	st, err := parse(s.ReadURL, io.LimitReader(res.Body, minRead), s.RecvAddress)
 	if err != nil {
 		return false, err
 	}
+
+	buyState <- st
 
 	s.pendingTx = st.Pending
 
