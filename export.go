@@ -20,25 +20,22 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 
 	e := csv.NewWriter(w)
 
-	e.Write([]string{"ts", "comment", "confirmations", "amount", "fee"})
+	e.Write([]string{"ts", "comment", "confirmations", "amount", "fee", "txn"})
 
 	for _, t := range txns {
-		if t.Amount > 0 {
-			// Ignore funding, we only care about what we paid out.
-			continue
-		}
 		e.Write([]string{
 			t.TransactionTime().Format(time.RFC3339),
 			t.Comment,
 			strconv.Itoa(t.Confirmations),
 			t.Amount.String(),
 			t.Fee.String(),
+			t.TXID,
 		})
 	}
 	e.Flush()
 }
 
 func startHTTPServer(addr string) {
-	http.HandleFunc("/export", exportTransactions)
+	http.HandleFunc("/export.csv", exportTransactions)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
