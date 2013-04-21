@@ -9,7 +9,7 @@ import (
 )
 
 func exportTransactions(w http.ResponseWriter, req *http.Request) {
-	txns, err := bc.ListTransactions("", 1000, 0)
+	accts, err := bc.ListAccounts()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -20,17 +20,26 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 
 	e := csv.NewWriter(w)
 
-	e.Write([]string{"ts", "comment", "confirmations", "amount", "fee", "txn"})
+	e.Write([]string{"ts", "acct", "comment", "confirmations", "amount", "fee", "txn"})
 
-	for _, t := range txns {
-		e.Write([]string{
-			t.TransactionTime().Format(time.RFC3339),
-			t.Comment,
-			strconv.Itoa(t.Confirmations),
-			t.Amount.String(),
-			t.Fee.String(),
-			t.TXID,
-		})
+	for acct := range accts {
+		txns, err := bc.ListTransactions("", 1000, 0)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		for _, t := range txns {
+			e.Write([]string{
+				t.TransactionTime().Format(time.RFC3339),
+				acct,
+				t.Comment,
+				strconv.Itoa(t.Confirmations),
+				t.Amount.String(),
+				t.Fee.String(),
+				t.TXID,
+			})
+		}
 	}
 	e.Flush()
 }
