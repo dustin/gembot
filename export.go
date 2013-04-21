@@ -12,6 +12,8 @@ import (
 func exportTransactions(w http.ResponseWriter, req *http.Request) {
 	q := req.FormValue("q")
 
+	after, _ := parseTime(req.FormValue("after"))
+
 	accts, err := bc.ListAccounts()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -35,6 +37,9 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 
 		for _, t := range txns {
 			if !(strings.Contains(acct, q) || strings.Contains(t.Comment, q)) {
+				continue
+			}
+			if !t.TransactionTime().After(after) {
 				continue
 			}
 			dir := "out"
