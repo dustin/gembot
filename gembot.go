@@ -61,6 +61,7 @@ type site struct {
 	ReadURL     string         `json:"read"`
 	BuyURL      string         `json:"buy"`
 	RecvAddress string         `json:"recv"`
+	MyName      string         `json:"myname"`
 	FromAcct    string         `json:"fromacct"`
 	Comment     string         `json:"comment"`
 	Disabled    bool           `json:"disabled"`
@@ -190,6 +191,7 @@ func parse(site string, r io.Reader, raddr string) (State, error) {
 			}
 		}
 		if worth != "" {
+			rv.IsMine = strings.Contains(g.Find(loc).Html(), raddr)
 			break
 		}
 	}
@@ -198,7 +200,6 @@ func parse(site string, r io.Reader, raddr string) (State, error) {
 	}
 	rv.Value, err = bitcoin.AmountFromBitcoinsString(worth)
 
-	rv.IsMine = strings.Contains(txt, raddr)
 	rv.Locked = len(g.Find(".nonbuy")) > 0
 
 	if rv.Locked {
@@ -222,7 +223,7 @@ func parseAddress(s string) string {
 }
 
 func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
-	data := url.Values{"address": {s.RecvAddress}}
+	data := url.Values{"address": {s.RecvAddress}, "user_name": {s.MyName}}
 	req, err := http.NewRequest("POST", s.BuyURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return false, err

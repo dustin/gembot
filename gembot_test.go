@@ -28,6 +28,7 @@ func TestCurrentValue(t *testing.T) {
 		{"normal.html", "1.82", "someone else", false, false},
 		{"locked.html", "1.82", "someone else", false, true},
 		{"mine.html", "1.82", "n4pKTfuJLmbuK2PaymXLWGy3FEERTovmkK", true, false},
+		{"mine2.html", "1.82", "n4pKTfuJLmbuK2PaymXLWGy3FEERTovmkK", true, false},
 		{"bears.html", "0.7379", "someone else", false, false},
 		{"goldbar.html", "0.05", "someone else", false, false},
 		{"bitkitty.html", "0.2988", "someone else", false, false},
