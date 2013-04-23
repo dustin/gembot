@@ -31,8 +31,8 @@ const (
 
 var durations = map[int]time.Duration{
 	tooHigh:    time.Minute * 15,
-	owned:      time.Minute * 5,
-	normal:     time.Minute,
+	owned:      time.Minute * 3,
+	normal:     time.Second * 45,
 	aggressive: time.Second * 10,
 }
 
