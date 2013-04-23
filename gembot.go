@@ -62,6 +62,7 @@ type site struct {
 	BuyURL      string         `json:"buy"`
 	RecvAddress string         `json:"recv"`
 	MyName      string         `json:"myname"`
+	MyUrl       string         `json:"myurl"`
 	FromAcct    string         `json:"fromacct"`
 	Comment     string         `json:"comment"`
 	Disabled    bool           `json:"disabled"`
@@ -169,7 +170,7 @@ func buyMonitor() {
 	}
 }
 
-func parse(site string, r io.Reader, raddr string) (State, error) {
+func parse(site string, r io.Reader, raddr, rurl string) (State, error) {
 	rv := State{Site: site}
 
 	g, err := goquery.Parse(r)
@@ -191,7 +192,9 @@ func parse(site string, r io.Reader, raddr string) (State, error) {
 			}
 		}
 		if worth != "" {
-			rv.IsMine = strings.Contains(g.Find(loc).Html(), raddr)
+			h := g.Find(loc).Html()
+			rv.IsMine = strings.Contains(h, raddr) ||
+				(rurl != "" && strings.Contains(h, rurl))
 			break
 		}
 	}
@@ -223,7 +226,11 @@ func parseAddress(s string) string {
 }
 
 func (s *site) buy(amt bitcoin.Amount) (bought bool, err error) {
-	data := url.Values{"address": {s.RecvAddress}, "user_name": {s.MyName}}
+	data := url.Values{
+		"address":   {s.RecvAddress},
+		"user_name": {s.MyName},
+		"user_link": {s.MyUrl},
+	}
 	req, err := http.NewRequest("POST", s.BuyURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return false, err
@@ -312,7 +319,8 @@ func (s *site) checkSite() (bought bool, err error) {
 		return false, err
 	}
 	defer res.Body.Close()
-	st, err := parse(s.ReadURL, io.LimitReader(res.Body, minRead), s.RecvAddress)
+	st, err := parse(s.ReadURL, io.LimitReader(res.Body, minRead),
+		s.RecvAddress, s.MyUrl)
 	if err != nil {
 		return false, err
 	}
