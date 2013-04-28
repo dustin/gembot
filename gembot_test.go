@@ -13,6 +13,11 @@ const (
 	myUrl  = "http://bleu.west.spy.net/~dustin/"
 )
 
+var myOldAddrs = []string{
+	"16TvogqN4iofgQRSdxqZ6VAs1TEP7e1MwH",
+	"1DapvhDDcZLTw3AyEEYzvP4yg7PgP7WtDa",
+}
+
 func parseFile(t *testing.T, fn string) (State, error) {
 	f, err := os.Open(fn)
 	if err != nil {
@@ -20,7 +25,7 @@ func parseFile(t *testing.T, fn string) (State, error) {
 	}
 	defer f.Close()
 	return parse("http://whatever/", io.LimitReader(f, minRead),
-		myAddr, myUrl)
+		myUrl, append(myOldAddrs, myAddr))
 }
 
 func TestCurrentValue(t *testing.T) {
@@ -35,6 +40,7 @@ func TestCurrentValue(t *testing.T) {
 		{"mine.html", "1.82", true, false},
 		{"mine2.html", "1.82", true, false},
 		{"mine3.html", "1.82", true, false},
+		{"mine-old.html", "1.82", true, false},
 		{"bears.html", "0.7379", false, false},
 		{"goldbar.html", "0.05", false, false},
 		{"bitkitty.html", "0.2988", false, false},

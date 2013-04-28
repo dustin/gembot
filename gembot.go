@@ -61,6 +61,7 @@ type site struct {
 	ReadURL     string         `json:"read"`
 	BuyURL      string         `json:"buy"`
 	RecvAddress string         `json:"recv"`
+	OldRecvAddr []string       `json:"old_recv"`
 	MyName      string         `json:"myname"`
 	MyUrl       string         `json:"myurl"`
 	FromAcct    string         `json:"fromacct"`
@@ -170,7 +171,7 @@ func buyMonitor() {
 	}
 }
 
-func parse(site string, r io.Reader, raddr, rurl string) (State, error) {
+func parse(site string, r io.Reader, rurl string, raddrs []string) (State, error) {
 	rv := State{Site: site}
 
 	g, err := goquery.Parse(r)
@@ -193,8 +194,12 @@ func parse(site string, r io.Reader, raddr, rurl string) (State, error) {
 		}
 		if worth != "" {
 			h := g.Find(loc).Html()
-			rv.IsMine = strings.Contains(h, raddr) ||
-				(rurl != "" && strings.Contains(h, rurl))
+			rv.IsMine = (rurl != "" && strings.Contains(h, rurl))
+			if !rv.IsMine {
+				for _, raddr := range raddrs {
+					rv.IsMine = rv.IsMine || strings.Contains(h, raddr)
+				}
+			}
 			break
 		}
 	}
@@ -320,7 +325,7 @@ func (s *site) checkSite() (bought bool, err error) {
 	}
 	defer res.Body.Close()
 	st, err := parse(s.ReadURL, io.LimitReader(res.Body, minRead),
-		s.RecvAddress, s.MyUrl)
+		s.MyUrl, append(s.OldRecvAddr, s.RecvAddress))
 	if err != nil {
 		return false, err
 	}
