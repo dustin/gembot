@@ -14,7 +14,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/dustin/go.bitcoin"
@@ -83,7 +82,6 @@ var conf = struct {
 	Notifications []notifier
 }{}
 
-var myAddrLock sync.Mutex
 var myAddresses = map[string]bool{}
 
 const buyStateFile = ",buystate.json"
@@ -175,9 +173,6 @@ func buyMonitor() {
 }
 
 func isMyAddress(a string) bool {
-	myAddrLock.Lock()
-	defer myAddrLock.Unlock()
-
 	for aa := range myAddresses {
 		if strings.Contains(a, aa) {
 			return true
@@ -510,9 +505,7 @@ func updateMyAddresses() error {
 		}
 	}
 
-	myAddrLock.Lock()
 	myAddresses = atmp
-	myAddrLock.Unlock()
 
 	return nil
 }
