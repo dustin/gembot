@@ -24,8 +24,13 @@ func parseFile(t *testing.T, fn string) (State, error) {
 		return State{}, err
 	}
 	defer f.Close()
-	return parse("http://whatever/", io.LimitReader(f, minRead),
-		myUrl, append(myOldAddrs, myAddr))
+
+	myAddresses = map[string]bool{myAddr: true}
+	for _, a := range myOldAddrs {
+		myAddresses[a] = true
+	}
+
+	return parse("http://whatever/", io.LimitReader(f, minRead), myUrl)
 }
 
 func TestCurrentValue(t *testing.T) {

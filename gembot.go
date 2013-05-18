@@ -14,6 +14,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dustin/go.bitcoin"
@@ -61,7 +62,6 @@ type site struct {
 	ReadURL     string         `json:"read"`
 	BuyURL      string         `json:"buy"`
 	RecvAddress string         `json:"recv"`
-	OldRecvAddr []string       `json:"old_recv"`
 	MyName      string         `json:"myname"`
 	MyUrl       string         `json:"myurl"`
 	FromAcct    string         `json:"fromacct"`
@@ -82,6 +82,9 @@ var conf = struct {
 	Sites         []site
 	Notifications []notifier
 }{}
+
+var myAddrLock sync.Mutex
+var myAddresses = map[string]bool{}
 
 const buyStateFile = ",buystate.json"
 
@@ -171,7 +174,19 @@ func buyMonitor() {
 	}
 }
 
-func parse(site string, r io.Reader, rurl string, raddrs []string) (State, error) {
+func isMyAddress(a string) bool {
+	myAddrLock.Lock()
+	defer myAddrLock.Unlock()
+
+	for aa := range myAddresses {
+		if strings.Contains(a, aa) {
+			return true
+		}
+	}
+	return false
+}
+
+func parse(site string, r io.Reader, rurl string) (State, error) {
 	rv := State{Site: site}
 
 	g, err := goquery.Parse(r)
@@ -194,12 +209,7 @@ func parse(site string, r io.Reader, rurl string, raddrs []string) (State, error
 		}
 		if worth != "" {
 			h := g.Find(loc).Html()
-			rv.IsMine = (rurl != "" && strings.Contains(h, rurl))
-			if !rv.IsMine {
-				for _, raddr := range raddrs {
-					rv.IsMine = rv.IsMine || strings.Contains(h, raddr)
-				}
-			}
+			rv.IsMine = (rurl != "" && strings.Contains(h, rurl)) || isMyAddress(h)
 			break
 		}
 	}
@@ -324,8 +334,7 @@ func (s *site) checkSite() (bought bool, err error) {
 		return false, err
 	}
 	defer res.Body.Close()
-	st, err := parse(s.ReadURL, io.LimitReader(res.Body, minRead),
-		s.MyUrl, append(s.OldRecvAddr, s.RecvAddress))
+	st, err := parse(s.ReadURL, io.LimitReader(res.Body, minRead), s.MyUrl)
 	if err != nil {
 		return false, err
 	}
@@ -483,6 +492,31 @@ func readConf(fn string) {
 	}
 }
 
+func updateMyAddresses() error {
+	atmp := map[string]bool{}
+
+	accts, err := bc.ListAccounts()
+	if err != nil {
+		return err
+	}
+
+	for a := range accts {
+		aa, err := bc.GetAddressesByAccount(a)
+		if err != nil {
+			return err
+		}
+		for _, x := range aa {
+			atmp[x] = true
+		}
+	}
+
+	myAddrLock.Lock()
+	myAddresses = atmp
+	myAddrLock.Unlock()
+
+	return nil
+}
+
 func main() {
 	httpBind := flag.String("http", ":8077",
 		"HTTP binding address (for status/listening")
@@ -491,11 +525,14 @@ func main() {
 
 	readConf(flag.Arg(0))
 
-	go startHTTPServer(*httpBind)
-	go buyMonitor()
-
 	bc = bitcoin.NewBitcoindClient(conf.Bitcoin,
 		conf.BitcoinUser, conf.BitcoinPass)
+
+	if err := updateMyAddresses(); err != nil {
+		log.Fatalf("Can't update my addresses: %v", err)
+	}
+	go startHTTPServer(*httpBind)
+	go buyMonitor()
 
 	go notify(conf.Notifications)
 
