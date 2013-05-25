@@ -4,10 +4,20 @@ import (
 	"encoding/csv"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
+
+type doubleslice [][]string
+
+func (p doubleslice) Len() int           { return len(p) }
+func (p doubleslice) Less(i, j int) bool { return p[i][0] < p[j][0] }
+func (p doubleslice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
+// Sort is a convenience method.
+func (p doubleslice) Sort() { sort.Sort(p) }
 
 func exportTransactions(w http.ResponseWriter, req *http.Request) {
 	q := req.FormValue("q")
@@ -28,6 +38,8 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 	e.Write([]string{"ts", "acct", "dir", "comment",
 		"confirmations", "amount", "fee", "txn"})
 
+	var tlist doubleslice
+
 	for acct := range accts {
 		txns, err := bc.ListTransactions(acct, 1000, 0)
 		if err != nil {
@@ -46,7 +58,7 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 			if t.Amount > 0 {
 				dir = "in"
 			}
-			e.Write([]string{
+			tlist = append(tlist, []string{
 				t.TransactionTime().Format(time.RFC3339),
 				acct,
 				dir,
@@ -58,6 +70,11 @@ func exportTransactions(w http.ResponseWriter, req *http.Request) {
 			})
 		}
 	}
+
+	tlist.Sort()
+
+	e.WriteAll([][]string(tlist))
+
 	e.Flush()
 }
 
