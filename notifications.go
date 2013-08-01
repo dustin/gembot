@@ -51,7 +51,7 @@ func notifyMyAndroid(n notifier, note notification) (err error) {
 		Application: n.Config["application"],
 		Description: note.Msg,
 		Event:       note.Event,
-		Priority:    i,
+		Priority:    nma.PriorityLevel(i),
 	}
 
 	return notifier.Notify(&msg)
